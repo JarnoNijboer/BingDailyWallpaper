@@ -1,6 +1,8 @@
 ﻿using System;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using System.Xml;
 
@@ -22,14 +24,30 @@ namespace BingDailyWallpaper
 
             var imageUrl = $"https://bing.com{rawUrl.Replace("1366x768", "1920x1080")}";
 
-            var imagePath = $"{Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)}/Wallpapers/BingWallpaper.jpg";
+            using var httpClient = new HttpClient();
+            using var sha256 = SHA256Managed.Create();
 
-            using (var httpClient = new HttpClient())
+            var bytes = await httpClient.GetByteArrayAsync(imageUrl).ConfigureAwait(false);
+
+            var hash = BitConverter.ToString(sha256.ComputeHash(bytes)).Replace("-", string.Empty);
+            
+            var dirPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Wallpapers");
+            var directory = new DirectoryInfo(dirPath);
+
+            if (!directory.Exists)
             {
-                var bytes = await httpClient.GetByteArrayAsync(imageUrl).ConfigureAwait(false);
+                directory.Create();
+            }
+            
+            var imagePath = Path.Combine(directory.FullName, $"{hash}.jpg");
 
+            if (!File.Exists(imagePath))
+            {
                 File.WriteAllBytes(imagePath, bytes);
             }
+
+            // Cleanup old files
+            directory.GetFiles("*.jpg").OrderByDescending(x => x.CreationTimeUtc).Skip(10).ToList().ForEach(x => x.Delete());
         }
     }
 }
